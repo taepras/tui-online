@@ -70,6 +70,49 @@ io.on('connection', (socket) => {
       io.to(socketId).emit('startGame', games[roomId].getPlayerStateBySocketId(socketId));
     });
   });
+
+  socket.on('play', ({ roomId, piecesToPlay }, callbackFn) => {
+    if (!games[roomId]) return;
+
+    let playerId = games[roomId].socketIdToPlayerIdMap[socket.id]
+
+    if (games[roomId].turnType === null) {
+      let ok = games[roomId].setTurnTypeFromFirstPlay(piecesToPlay);
+      if (!ok) {
+        callbackFn(false);
+        return;
+      }
+    } else if (games[roomId].turnType.count !== piecesToPlay.length) {
+      callbackFn(false);
+      return;
+    }
+
+    console.log('play: ', roomId, socket.id, playerId, piecesToPlay);
+
+    io.to(roomId).emit('play', {
+      socketId: socket.id,
+      playerId: playerId,
+      turnType: games[roomId].turnType
+    });
+
+    callbackFn(true);
+
+    let result = games[roomId].registerPlay(playerId, piecesToPlay);
+    if (result !== null) {
+      io.to(roomId).emit('turnComplete', result);
+
+      games[roomId].applyTurnAftermath(result.winnerId);
+      console.log('aftermath', games[roomId].players.map(p => p.wins))
+      games[roomId].players
+        .map(p => p.socketId)
+        .forEach(socketId => {
+          io.to(socketId).emit(
+            'turnAftermath',
+            games[roomId].getPlayerStateBySocketId(socketId)
+          );
+        });
+    }
+  });
 });
 
 server.listen(3000, () => {
