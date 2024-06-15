@@ -32,7 +32,6 @@ declare module '$env/static/private' {
 	export const npm_node_execpath: string;
 	export const SHLVL: string;
 	export const npm_config_noproxy: string;
-	export const MOTD_SHOWN: string;
 	export const HOME: string;
 	export const OLDPWD: string;
 	export const NVM_BIN: string;
@@ -118,7 +117,6 @@ declare module '$env/dynamic/private' {
 		npm_node_execpath: string;
 		SHLVL: string;
 		npm_config_noproxy: string;
-		MOTD_SHOWN: string;
 		HOME: string;
 		OLDPWD: string;
 		NVM_BIN: string;
