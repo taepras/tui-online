@@ -35,13 +35,6 @@ io.on('connection', (socket) => {
     callbackFn(player);
   });
 
-  // Listen for chatMessage events
-  socket.on('chatMessage', ({ roomId, message }) => {
-    console.log(`Message from ${socket.id} in room ${roomId}: ${message}`);
-    // Broadcasting message to all other users in the same room
-    io.to(roomId).emit('message', message);
-  });
-
   socket.on('leaveRoom', (roomId, callbackFn) => {
     console.log(`User ${socket.id} left room ${roomId}`);
 
