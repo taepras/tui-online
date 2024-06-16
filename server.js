@@ -24,15 +24,17 @@ io.on('connection', (socket) => {
   socket.on('joinRoom', (roomId, callbackFn) => {
     socket.join(roomId);
     console.log(`User ${socket.id} joined room ${roomId}`);
-    io.to(roomId).emit('message', `A new user has joined the room: ${roomId}`);
-
+    
     if (!games[roomId]) {
       console.log('🎮 creating game')
       games[roomId] = new GameController();
     }
-
+    
     let player = games[roomId].addPlayer(socket.id);
-    callbackFn(player);
+    let playersInfo = games[roomId].players.map(x=>x.socketId);
+
+    io.to(roomId).emit('playerJoined', playersInfo);
+    callbackFn(player, playersInfo);
   });
 
   socket.on('leaveRoom', (roomId, callbackFn) => {

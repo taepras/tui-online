@@ -214,6 +214,10 @@ class GameController {
 
     return this.players;
   }
+
+  getMaskedGameInfoForPlayer (playerId) {
+    return players; // TODO: mask info
+  }
 }
 
 module.exports = GameController; // Exporting the GameController for use in other parts of the application
