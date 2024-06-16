@@ -5,8 +5,8 @@
   import GamePiece from "../../../lib/components/GamePiece.svelte";
   import GamePieceStack from "../../../lib/components/GamePieceStack.svelte";
 
-  let roomId;
-  $: roomId = $page.params.roomId; // Reactive assignment
+  let DEBUG = false;
+  const roomId = $page.params.roomId;
 
   let socket;
   let gameState = null;
@@ -181,7 +181,18 @@
     );
   }
 
+  function checkValidFight(turnType, piecesToPlay) {
+    if (turnType === null) return false;
+    if (turnType.count !== piecesToPlay.length) return false;
+    if (turnType.isHu) {
+      return checkValidHuPlay(piecesToPlay);
+    } else {
+      return piecesToPlay.every((x) => piecesToPlay[0] == x);
+    }
+  }
+
   $: isValidPlay = checkValidPlay(piecesToPlay);
+  $: isValidFight = checkValidFight(gameState?.turnType ?? null, piecesToPlay);
 
   function playPieces() {
     socket.emit("roundPlay", { roomId, piecesToPlay }, (isOk) => {
@@ -202,43 +213,79 @@
     gameState !== null && gameState.players && Array.isArray(gameState.players)
       ? gameState.players[myPlayerId] ?? {}
       : {};
+
+  $: isMyTurn =
+    (gameState?.roundState == "open_play" && !isRoundLeader) ||
+    (gameState?.roundState == "wait_for_leader" && isRoundLeader);
 </script>
 
-<!-- <div class="hand">
-  {#each myPlayerState.hand as piece, index}
-    <GamePiece
-      pieceType={piece}
-      onToggleSelected={(_) => onPieceToggle(index)}
-      isSelected={piecesToPlayIndexes.includes(index)}
-    />
-  {/each}
-</div> -->
-<pre>
+<div class="background" class:active={isMyTurn}>
+  {#if gameState?.roundState == "open_play" && isReadyToRevealRound}
+    <div class="info"></div>
+  {:else if gameState?.roundState == "reveal"}
+    <div class="info"></div>
+  {:else if isMyTurn && !isSubmitted}
+    <div class="info">
+      Your Turn<br />
+      <small>
+        {#if gameState.turnType !== null}Round Type: {gameState.turnType.count} -
+          {gameState.turnType.isHu ? "Straight" : "Same"}
+        {:else}(Round Leader){/if}
+      </small>
+    </div>
+  {:else if isSubmitted}
+    <div class="info">
+      Waiting for {gameState?.players.length -
+        gameState?.players?.filter((p) => p.piecesToPlay.length > 0).length ??
+        0} players to submit move...<br />
+      <small
+        >{#if gameState.turnType !== null}Round Type: {gameState.turnType.count}
+          - {gameState.turnType.isHu ? "Straight" : "Same"}
+        {:else}(Round Leader){/if}</small
+      >
+    </div>
+  {:else if gameState?.roundState == "wait_for_leader" && !isRoundLeader}
+    <div class="info">
+      Waiting for<br />Round Leader <span class="round-leader">👑</span>...
+    </div>
+  {/if}
+
+  <!-- {#if gameState?.roundState == "open_play" && isReadyToRevealRound}
+    <button on:click={revealRound}>REVEAL!</button>
+  {/if}
+  {#if gameState?.roundState == "reveal"}
+    <button on:click={completeRound}>NEXT ROUND</button>
+  {/if} -->
+</div>
+
+{#if DEBUG}
+  <pre>
   playerId: {myPlayerId} {myPlayerState.playerId}
   playing: {JSON.stringify(piecesToPlay)}
   isvalid: {isValidPlay}
   turnType: {JSON.stringify(gameState?.turnType)}
 </pre>
 
-{#if isSubmitted}
-  <h2>submitted</h2>
-{/if}
-
-{#if gameState?.roundState === "reveal"}
-  {#if gameState.roundWinner == myPlayerState.playerId + ""}
-    <h1 style="color: darkgreen;">Won turn!</h1>
-  {:else}
-    <h1 style="color: red;">Lose turn!</h1>
+  {#if isSubmitted}
+    <h2>submitted</h2>
   {/if}
-{/if}
 
-<!-- <h3>Game Log</h3>
+  {#if gameState?.roundState === "reveal"}
+    {#if gameState.roundWinner == myPlayerState.playerId + ""}
+      <h1 style="color: darkgreen;">Won turn!</h1>
+    {:else}
+      <h1 style="color: red;">Lose turn!</h1>
+    {/if}
+  {/if}
+
+  <!-- <h3>Game Log</h3>
 {#each eventLog as log}
   <div style="margin-bottom: 0;">{log}</div>
 {/each} -->
 
-<h3>Game State</h3>
-<pre>{JSON.stringify(gameState, null, 2)}</pre>
+  <h3>Game State</h3>
+  <pre>{JSON.stringify(gameState, null, 2)}</pre>
+{/if}
 
 <div class="hand me">
   <div class="winning-pile">
@@ -246,34 +293,41 @@
       <GamePieceStack pieces={winStack} />
     {/each}
   </div>
-  {isRoundLeader ? "👑" : ""}
+  <span style="font-weight: bold;">
+    Player {myPlayerId}
+    {#if isRoundLeader}
+      - <span class="round-leader">👑</span>{/if}
+  </span>
   {#if gameState?.roundState == "wait_for_leader"}
     {#if myPlayerState?.playerId == gameState?.roundLeader}
       {#if isSubmitted}
         <div>submitted</div>
       {:else if isValidPlay}
-        <button on:click={playPieces}>submit piece</button>
+        <button on:click={playPieces}>Submit Piece</button>
       {:else if piecesToPlay.length > 0}
-        <div>invalid move: {JSON.stringify(gameState?.turnType)}</div>
-      {:else}
-        <div>select pieces to play: {JSON.stringify(gameState?.turnType)}</div>
+        <div>Invalid Move</div>
       {/if}
-    {:else}
-      <div>waiting for round leader...</div>
     {/if}
   {:else if gameState?.roundState == "open_play"}
     {#if isSubmitted}
       <div>submitted</div>
+    {:else if isValidFight}
+      <button on:click={playPieces}>Fight</button>
     {:else if isValidPlay}
-      <button on:click={playPieces}>submit piece</button>
+      <button on:click={playPieces}>Surrender</button>
     {:else if piecesToPlay.length > 0}
-      <div>invalid move: {JSON.stringify(gameState?.turnType)}</div>
-    {:else}
-      <div>select pieces to play: {JSON.stringify(gameState?.turnType)}</div>
+      <div>Invalid Move</div>
     {/if}
   {/if}
 
-  <div class="pieces-in-hand" class:submitted={isSubmitted}>
+  <div
+    class="pieces-in-hand"
+    class:submitted={isSubmitted}
+    class:win={gameState?.roundState === "reveal" &&
+      gameState.roundWinner == myPlayerState.playerId + ""}
+    class:lose={gameState?.roundState === "reveal" &&
+      gameState.roundWinner != myPlayerState.playerId + ""}
+  >
     {#each myPlayerState?.hand ?? [] as piece, index}
       <GamePiece
         pieceType={piece}
@@ -285,20 +339,29 @@
 </div>
 
 {#each Array.from({ length: gameState?.players?.length - 1 }, (_, i) => i) as i}
+  {@const playerId = (myPlayerId + 1 + i) % (gameState?.players?.length || 1)}
   <div class="hand {['left', 'top', 'right'][i]}">
     <div class="player-status">
-      {gameState.roundLeader ==
-      (myPlayerId + 1 + i) % (gameState?.players?.length || 1)
-        ? "👑"
-        : ""}
+      <span style="">
+        Player {playerId}
+        {#if gameState.roundLeader == playerId}
+          - <span class="round-leader">👑</span>{/if}
+      </span>
       <div class="winning-pile">
-        {#each gameState?.players[(myPlayerId + 1 + i) % (gameState?.players?.length || 1)]?.wins ?? [] as winStack}
+        {#each gameState?.players[playerId]?.wins ?? [] as winStack}
           <GamePieceStack pieces={winStack} />
         {/each}
       </div>
     </div>
-    <div class="pieces-in-hand">
-      {#each gameState?.players[(myPlayerId + 1 + i) % (gameState?.players?.length || 1)]?.hand ?? [] as piece, index}
+    <div
+      class="pieces-in-hand"
+      class:submitted={isSubmitted}
+      class:win={gameState?.roundState === "reveal" &&
+        gameState.roundWinner == playerId + ""}
+      class:lose={gameState?.roundState === "reveal" &&
+        gameState.roundWinner != playerId + ""}
+    >
+      {#each gameState?.players[playerId]?.hand ?? [] as piece, index}
         <GamePiece pieceType={piece} />
       {/each}
     </div>
@@ -323,17 +386,17 @@
   </div>
 {/if}
 
-{#if gameState?.roundState == "open_play" && isReadyToRevealRound}
-  <div class="screen-center">
-    <button on:click={revealRound}>REVEAL!</button>
+<div class="screen-center">
+  <div class="info">
+    {#if gameState?.roundState == "open_play" && isReadyToRevealRound}
+      <button on:click={revealRound}>REVEAL!</button>
+    {/if}
+    {#if gameState?.roundState == "reveal"}
+      Player {gameState?.roundWinner} Won!<br />
+      <button on:click={completeRound}>NEXT ROUND</button>
+    {/if}
   </div>
-{/if}
-
-{#if gameState?.roundState == "reveal"}
-  <div class="screen-center">
-    <button on:click={completeRound}>NEXT ROUND</button>
-  </div>
-{/if}
+</div>
 
 <style>
   :root {
@@ -366,6 +429,16 @@
     grid-template-columns: 1fr 1fr 1fr 1fr;
     grid-template-rows: 1fr 1fr;
     gap: 4px;
+    padding: 8px;
+    border-radius: 40px;
+  }
+
+  .pieces-in-hand.win {
+    background-color: #0f04;
+  }
+
+  .pieces-in-hand.lose {
+    background-color: #8004;
   }
 
   .pieces-in-hand.submitted {
@@ -445,16 +518,103 @@
     top: 50%;
     transform: translate(-50%, -50%);
     z-index: 99;
+    padding-bottom: 64px;
   }
 
   .winning-pile {
     position: absolute;
     right: 0;
-    
+
     transform: translateX(100%);
   }
 
   .me .winning-pile {
     bottom: 0;
+  }
+
+  .background {
+    position: fixed;
+    z-index: -1;
+    inset: 0;
+    background-color: #cba;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding-bottom: 64px;
+    text-align: center;
+  }
+
+  .background::after {
+    content: " ";
+    position: absolute;
+    inset: 0;
+    background: transparent;
+    transition: all 0.5s;
+    background: linear-gradient(to top, #fd8f 0%, #fc80 160px);
+    opacity: 0;
+  }
+
+  .background.active::after {
+    opacity: 1;
+    animation: breathe 3s infinite;
+    /* background-color: #ccc; */
+  }
+
+  @keyframes breathe {
+    0% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0.5;
+    }
+  }
+
+  .info {
+    color: #222;
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-align: center;
+  }
+
+  .background .info {
+    color: #0004;
+  }
+
+  button {
+    background-color: #08f;
+    color: #fff;
+    font-weight: bold;
+    padding: 8px 16px;
+    border: 1px #0004 solid;
+    border-radius: 999px;
+    transition: all 0.2s;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 4px #0004;
+  }
+
+  button:hover {
+    background-color: #29f;
+    transform: translateY(-4px);
+    box-shadow: 0 4px 8px #0004;
+  }
+
+  button:active {
+    background-color: #07d;
+    transform: translateY(0px);
+    box-shadow: 0 0px 0px #0004;
+  }
+
+  .round-leader {
+    text-shadow: 0 0 3px #333, 0 0 3px #333, 0 0 3px #333, 0 0 3px #333, 0 0 3px #333, 0 0 3px #333, 0 0 3px #333, 0 0 3px #333;
+    display: inline-block;
+    /* background-color: #fff; */
+    /* padding: 4px 4px; */
+    color: #000;
+    border-radius: 999px;
+    line-height: 1;
   }
 </style>
