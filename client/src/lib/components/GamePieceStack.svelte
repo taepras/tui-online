@@ -1,15 +1,13 @@
 <script>
+  import GamePiece from "./GamePiece.svelte";
+
   export let pieces = [0, 0, 0, 0]; // 1~14
 </script>
 
 <div class="game-piece-stack">
   {#each pieces as piece, index}
-    <div
-      class="game-piece"
-      class:red-piece={piece % 2 == 1}
-      style:z-index={100 - index}
-    >
-      {piece}
+    <div class="game-piece-container" style:z-index={100 - index}>
+      <GamePiece pieceType={piece} />
     </div>
   {/each}
 </div>
@@ -20,33 +18,13 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
+    width: 50%;
     /* gap: -24px; */
   }
 
-  .game-piece {
-    width: 32px;
-    height: 32px;
-    border-radius: 999px;
-    display: inline-flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 16px;
-    line-height: 1;
-    font-family: sans-serif;
-    background-color: #fed;
-    border: 2px solid black;
-    color: black;
-    /* box-sizing: border-box; */
-
-    margin-bottom: -30px;
+  .game-piece-container {
+    transform: scale(0.5);
+    margin-bottom: -60px;
   }
 
-  .game-piece.red-piece {
-    color: red;
-    border-color: red;
-  }
-
-  .game-piece.selected {
-    background-color: #ff4;
-  }
 </style>

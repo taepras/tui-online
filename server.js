@@ -24,17 +24,17 @@ io.on('connection', (socket) => {
   socket.on('joinRoom', (roomId, callbackFn) => {
     socket.join(roomId);
     console.log(`User ${socket.id} joined room ${roomId}`);
-    
+
     if (!games[roomId]) {
       console.log('🎮 creating game')
       games[roomId] = new GameController();
     }
-    
+
     let player = games[roomId].addPlayer(socket.id);
-    let playersInfo = games[roomId].players.map(x=>x.socketId);
+    let playersInfo = games[roomId].players.map(x => x.socketId);
 
     io.to(roomId).emit('playerJoined', playersInfo);
-    callbackFn(player, playersInfo);
+    callbackFn?.(player, playersInfo);
   });
 
   socket.on('leaveRoom', (roomId, callbackFn) => {
@@ -59,54 +59,67 @@ io.on('connection', (socket) => {
 
     console.log('game start', games[roomId]);
     games[roomId].start();
-    games[roomId].players.map(p => p.socketId).forEach(socketId => {
-      console.log(socketId);
-      console.log(games[roomId].getPlayerStateBySocketId(socketId));
-      io.to(socketId).emit('startGame', games[roomId].getPlayerStateBySocketId(socketId));
+    games[roomId].players.forEach(player => {
+      console.log(player.socketId);
+      io.to(player.socketId).emit(
+        'startGame', 
+        games[roomId].getMaskedGameInfoForPlayer(player.playerId), 
+        player
+      );
     });
   });
 
-  socket.on('play', ({ roomId, piecesToPlay }, callbackFn) => {
+  socket.on('roundPlay', ({ roomId, piecesToPlay }, callbackFn) => {
     if (!games[roomId]) return;
 
     let playerId = games[roomId].socketIdToPlayerIdMap[socket.id]
+    let isOk = games[roomId].commitMove(playerId, piecesToPlay);
 
-    if (games[roomId].turnType === null) {
-      let ok = games[roomId].setTurnTypeFromFirstPlay(piecesToPlay);
-      if (!ok) {
-        callbackFn(false);
-        return;
-      }
-    } else if (games[roomId].turnType.count !== piecesToPlay.length) {
-      callbackFn(false);
+    if (!isOk) {
+      console.log('[roundPlay] invalid play');
+      callbackFn?.(false);
       return;
     }
 
     console.log('play: ', roomId, socket.id, playerId, piecesToPlay);
 
-    io.to(roomId).emit('play', {
-      socketId: socket.id,
-      playerId: playerId,
-      turnType: games[roomId].turnType
+    // io.to(roomId).emit('play', {
+    //   socketId: socket.id,
+    //   playerId: playerId,
+    //   turnType: games[roomId].turnType
+    // });
+
+    games[roomId].players.forEach(p => {
+      io.to(p.socketId).emit('roundUpdate', games[roomId].getMaskedGameInfoForPlayer(p.playerId));
     });
 
-    callbackFn(true);
+    callbackFn?.(true);
 
-    let result = games[roomId].registerPlay(playerId, piecesToPlay);
-    if (result !== null) {
-      io.to(roomId).emit('turnComplete', result);
+    if (games[roomId].isReadyToReveal())
+      io.to(roomId).emit('roundReadyToReveal');
+  });
 
-      games[roomId].applyTurnAftermath(result.winnerId);
-      console.log('aftermath', games[roomId].players.map(p => p.wins))
-      games[roomId].players
-        .map(p => p.socketId)
-        .forEach(socketId => {
-          io.to(socketId).emit(
-            'turnAftermath',
-            games[roomId].getPlayerStateBySocketId(socketId)
-          );
-        });
+  socket.on('roundReveal', ({ roomId }, callbackFn) => {
+    let result = games[roomId].judgeWinner();
+    if (result === false) {
+      console.log('cannot reveal, round in progress');
+      callbackFn?.(false);
+      return;
     }
+
+    io.to(roomId).emit('roundReveal', result);
+    games[roomId].players.forEach(p => {
+      io.to(p.socketId).emit('roundUpdate', games[roomId].getMaskedGameInfoForPlayer(p.playerId));
+    });
+  });
+
+  socket.on('roundComplete', ({ roomId }) => {
+    games[roomId].applyTurnAftermath();
+    games[roomId].nextRound();
+    io.to(roomId).emit('roundComplete'); 
+    games[roomId].players.forEach(p => {
+      io.to(p.socketId).emit('roundUpdate', games[roomId].getMaskedGameInfoForPlayer(p.playerId));
+    });
   });
 });
 

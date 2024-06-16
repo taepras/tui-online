@@ -24,7 +24,7 @@ class GameController {
   constructor() {
     this.round = 0;
     this.gameLeader = 0;
-    this.turnLeader = 0;
+    this.roundLeader = 0;
     this.turnType = null;
     // {
     //   count: 1,
@@ -46,6 +46,9 @@ class GameController {
 
     this.gameState = 'waiting';
     // Possible states: 'waiting', 'start', 'set_goal', 'leader_turn', 'followers_turn'
+
+    this.roundState = 'wait_for_leader'; // Possible states: 'wait_for_leader', 'open_play', 'reveal'
+    this.roundWinner = null;
   }
 
   setState(newGameState) {
@@ -90,7 +93,10 @@ class GameController {
 
   getPlayerStateBySocketId(socketId) {
     const index = this.socketIdToPlayerIdMap[socketId];
-    return this.players[index];
+    return {
+      ...this.players[index],
+      isLeader: index == this.roundLeader,
+    };
   }
 
   addPlayer(socketId) {
@@ -158,34 +164,82 @@ class GameController {
     );
   }
 
-  registerPlay(playerId, piecesToPlay) {
-    if (this.turnType !== null && this.turnType.count !== piecesToPlay.length)
-      return null;
+  getMaskedGameInfoForPlayer(playerId) {
+    let maskedGameState = JSON.parse(JSON.stringify(this));
+    maskedGameState.players.forEach((player) => {
+      if (player.playerId === playerId)
+        return;
+
+      if (this.roundState == "reveal") {
+        player.hand = [
+          ...player.piecesToPlay, 
+          ...Array(player.hand.length - player.piecesToPlay.length).fill(0)
+        ];
+      } else {
+        player.hand = player.hand.map(x => 0); // hide hand
+        player.piecesToPlay = player.piecesToPlay.map(x => 0); // hide played
+      }
+    });
+    return maskedGameState; // TODO: mask info
+  }
+
+  commitMove(playerId, piecesToPlay) {
+    console.log('check move:', playerId, piecesToPlay)
+    // check valid turn
+    if (this.roundState === 'wait_for_leader') {
+      if (playerId === this.roundLeader) {
+        let validMove = this.setTurnTypeFromFirstPlay(piecesToPlay);
+        if (!validMove)
+          return false;
+      } else {
+        return false; // invalid play
+      }
+    } else if (this.roundState === 'open_play') {
+      if (this.turnType.count !== piecesToPlay.length)
+        return false;
+    }
 
     this.players[playerId].piecesToPlay = piecesToPlay;
 
-    // if all played -- judge winner
-    if (this.players.every(p => p.piecesToPlay.length > 0)) {
-      console.log('judging...');
-      let topPiece = 999;
-      let winnerId = -1;
-      for (let i in this.players) {
-        if (!this.checkValidPlayWithTurnType(this.players[i].piecesToPlay))
-          continue;
-        let topPieceForPlayer = Math.min(...this.players[i].piecesToPlay)
-        if (topPieceForPlayer < topPiece) {
-          topPiece = topPieceForPlayer;
-          winnerId = i;
-        }
-      }
-      return { winnerId: +winnerId, topPiece };
+    if (this.roundState === 'wait_for_leader') {
+      this.roundState = 'open_play';
     }
 
-    return null;
+    return true;
   }
 
-  applyTurnAftermath(winnerId) {
-    winnerId = +winnerId;
+  isReadyToReveal() {
+    return this.players.every(p => p.piecesToPlay.length > 0)
+  }
+
+  judgeWinner() {
+    // if all played -- judge winner
+    if (!this.isReadyToReveal())
+      return false;
+
+    this.roundState = "reveal";
+
+    console.log('judging...');
+    let topPiece = 999;
+    let winnerId = -1;
+    for (let i in this.players) {
+      if (!this.checkValidPlayWithTurnType(this.players[i].piecesToPlay))
+        continue;
+      let topPieceForPlayer = Math.min(...this.players[i].piecesToPlay)
+      if (topPieceForPlayer < topPiece) {
+        topPiece = topPieceForPlayer;
+        winnerId = i;
+      }
+    }
+
+    this.roundWinner = +winnerId;
+    return { winnerId: +winnerId, topPiece };
+  }
+
+  applyTurnAftermath() {
+    if (this.roundWinner === null) return false;
+
+    let winnerId = this.roundWinner;
     let winningPile = this.players[winnerId].piecesToPlay.map(p => []);
     let nPlayers = this.players.length;
     for (let i = 0; i < nPlayers; i++) {
@@ -209,14 +263,17 @@ class GameController {
     this.players[winnerId].wins.push(...winningPile);
     this.players.forEach(p => p.piecesToPlay = [])
 
-    this.turnLeader = winnerId;
+    this.roundLeader = winnerId;
     this.turnType = null;
 
     return this.players;
   }
 
-  getMaskedGameInfoForPlayer (playerId) {
-    return players; // TODO: mask info
+  nextRound() {
+    this.roundLeader = this.roundWinner;
+    this.roundState = 'wait_for_leader';
+    this.roundWinner = null;
+    //should we move roundLeader setting here? but how?
   }
 }
 
