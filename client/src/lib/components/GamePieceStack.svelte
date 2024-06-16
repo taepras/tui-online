@@ -18,7 +18,7 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    width: 50%;
+    /* width: 50%; */
     /* gap: -24px; */
   }
 

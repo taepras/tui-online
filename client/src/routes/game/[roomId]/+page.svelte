@@ -254,9 +254,9 @@
       {:else if isValidPlay}
         <button on:click={playPieces}>submit piece</button>
       {:else if piecesToPlay.length > 0}
-        <div>invalid move</div>
+        <div>invalid move: {JSON.stringify(gameState?.turnType)}</div>
       {:else}
-        <div>select pieces to play</div>
+        <div>select pieces to play: {JSON.stringify(gameState?.turnType)}</div>
       {/if}
     {:else}
       <div>waiting for round leader...</div>
@@ -267,9 +267,9 @@
     {:else if isValidPlay}
       <button on:click={playPieces}>submit piece</button>
     {:else if piecesToPlay.length > 0}
-      <div>invalid move</div>
+      <div>invalid move: {JSON.stringify(gameState?.turnType)}</div>
     {:else}
-      <div>select pieces to play</div>
+      <div>select pieces to play: {JSON.stringify(gameState?.turnType)}</div>
     {/if}
   {/if}
 
